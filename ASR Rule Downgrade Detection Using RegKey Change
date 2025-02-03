@@ -1,0 +1,33 @@
+let QueryFrequency = 4h; //used for the ingestiontime fix below. This should match your query frequency in your Analytics yaml file, or in the GUI
+let regexPattern1 = @"Changed from (Audit|Blocked) to (Disabled|Warn)"; //when an audit or block rule is downgraded to disabled or warn only
+let regexPattern2 = @"Changed from (Blocked) to (Disabled|Warn|Audit)"; //when any rule set to block is set to any value that allows it to be bypassed
+DeviceRegistryEvents
+| where ingestion_time() > ago(QueryFrequency) //ensures the ingestion time is the same as the frequency, to avoid ingestion delay causing visibility gap
+| where InitiatingProcessFileName == "omadmclient.exe" //used when change is made via InTune Policy. Remove this if you want to see non-InTune made changes, or add an 'or !=' statement to exclude it.
+| where RegistryValueName == "ASRRules" //our ASR RegKey value
+| extend CurrentRegValueData = tolower(RegistryValueData) //normalise the case to lower to make life easier
+| extend PreviousRegValueData = tolower(PreviousRegistryValueData) //normalise the case to lower to make life easier
+| extend CurrentRegValueData = split(CurrentRegValueData, "|") //split the changed RegKeyValue up in to separate rows for each policy
+| mv-expand CurrentRegValueData = CurrentRegValueData //expand the created array of changed ASR RegKeys in to separate records
+| extend CurrentKeyValuePair = split(CurrentRegValueData, "=") //split the ASR GUID and rule state into two columns
+| extend PreviousRegValueData = split(PreviousRegValueData, "|") //split the previous RegKeyValue up in to separate rows for each policy
+| mv-expand PreviousRegValueData = PreviousRegValueData //expand the array of ASR RegKeys in to separate records
+| extend PreviousKeyValuePair = split(PreviousRegValueData, "=") //split the previous ASR GUID and rule state into two columns
+| summarize by DeviceName, PreviousRegKey = tostring(PreviousKeyValuePair[0]), PreviousRegValue = toint(PreviousKeyValuePair[1]), CurrentRegKey = tostring(CurrentKeyValuePair[0]), CurrentRegValue = toint(CurrentKeyValuePair[1])
+| where CurrentRegKey == PreviousRegKey and CurrentRegValue != PreviousRegValue //show me entries where thenew ASR rule state has changed from its previous setting.
+| extend PreviousRegValue = case(
+    PreviousRegValue=="0", "Disabled",
+    PreviousRegValue=="1", "Blocked",
+    PreviousRegValue=="2", "Audit",
+    PreviousRegValue=="6", "Warn",
+    "ErrorGettingValue"
+    ) //translate the ASR Registry state to its human-readable state
+| extend CurrentRegValue = case(
+    CurrentRegValue=="0", "Disabled",
+    CurrentRegValue=="1", "Blocked",
+    CurrentRegValue=="2", "Audit",
+    CurrentRegValue=="6", "Warn",
+    "ErrorGettingValue"
+    ) //translate the ASR Registry state to its human-readable state
+| extend ChangeDescription = strcat("Changed from ", tostring(PreviousRegValue), " to ", tostring(CurrentRegValue)) //string together what was changed
+| where ChangeDescription matches regex regexPattern1 or ChangeDescription matches regex regexPattern2 //match against the regex we defined at the start for changes we want to be alerted on
