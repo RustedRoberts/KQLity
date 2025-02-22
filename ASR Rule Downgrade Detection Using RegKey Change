@@ -1,9 +1,11 @@
-let QueryFrequency = 4h; //used for the ingestiontime fix below. This should match your query frequency in your Analytics yaml file, or in the GUI
+let QueryFrequency = 4h; //Used for the ingestiontime fix below. This should match your query frequency in your Analytics yaml file, or in the GUI
 let regexPattern1 = @"Changed from (Audit|Blocked) to (Disabled|Warn)"; //when an audit or block rule is downgraded to disabled or warn only
 let regexPattern2 = @"Changed from (Blocked) to (Disabled|Warn|Audit)"; //when any rule set to block is set to any value that allows it to be bypassed
 DeviceRegistryEvents
 | where ingestion_time() > ago(QueryFrequency) //ensures the ingestion time is the same as the frequency, to avoid ingestion delay causing visibility gap
-| where InitiatingProcessFileName == "omadmclient.exe" //used when change is made via InTune Policy. Remove this if you want to see non-InTune made changes, or add an 'or !=' statement to exclude it to see unexpected process initiators
+| where InitiatingProcessFileName == "omadmclient.exe" // used when change is made via InTune Policy.
+                                                       // Remove this if you want to see non-InTune made changes,
+| extend CurrentRegValueData = tolower(RegistryValueData) //Normalise the case to lower to make life easier
 | where RegistryValueName == "ASRRules" //our ASR RegKey value
 | extend CurrentRegValueData = tolower(RegistryValueData) //normalise the case to lower to make life easier
 | extend PreviousRegValueData = tolower(PreviousRegistryValueData) //normalise the case to lower to make life easier
