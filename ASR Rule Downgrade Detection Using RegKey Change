@@ -3,9 +3,13 @@ let regexPattern1 = @"Changed from (Audit|Blocked) to (Disabled|Warn)"; //when a
 let regexPattern2 = @"Changed from (Blocked) to (Disabled|Warn|Audit)"; //when any rule set to block is set to any value that allows it to be bypassed
 DeviceRegistryEvents
 | where ingestion_time() > ago(QueryFrequency) //ensures the ingestion time is the same as the frequency, to avoid ingestion delay causing visibility gap
+<<<<<<< HEAD
 | where InitiatingProcessFileName == "omadmclient.exe" // used when change is made via InTune Policy.
                                                        // Remove this if you want to see non-InTune made changes,
 | extend CurrentRegValueData = tolower(RegistryValueData) //Normalise the case to lower to make life easier
+=======
+| where InitiatingProcessFileName == "omadmclient.exe" //used when change is made via InTune Policy.
+>>>>>>> d27ca10a60a8f9ca70aa63cd4e4d915a08bb8bf6
 | where RegistryValueName == "ASRRules" //our ASR RegKey value
 | extend CurrentRegValueData = tolower(RegistryValueData) //normalise the case to lower to make life easier
 | extend PreviousRegValueData = tolower(PreviousRegistryValueData) //normalise the case to lower to make life easier
